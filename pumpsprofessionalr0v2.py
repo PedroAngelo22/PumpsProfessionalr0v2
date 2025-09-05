@@ -31,7 +31,6 @@ FLUIDOS_PADRAO = {
     "Água a 20°C": {"rho": 998.2, "nu": 1.004e-6}, 
     "Etanol a 20°C": {"rho": 789.0, "nu": 1.51e-6} 
 }
-# K_FACTORS permanece igual
 K_FACTORS = {
     "Entrada de Borda Viva": 0.5, "Entrada Levemente Arredondada": 0.2, "Entrada Bem Arredondada": 0.04,
     "Saída de Tubulação": 1.0, "Válvula Gaveta (Totalmente Aberta)": 0.2, "Válvula Gaveta (1/2 Aberta)": 5.6,
@@ -41,8 +40,6 @@ K_FACTORS = {
 }
 
 # --- FUNÇÕES DE CÁLCULO (O MOTOR DA APLICAÇÃO) ---
-# ... (Todas as suas funções de cálculo permanecem exatamente iguais, mas agora usarão
-#      os dicionários combinados de fluidos e materiais) ...
 def calcular_perda_serie(lista_trechos, vazao_m3h, fluido_selecionado, materiais_combinados, fluidos_combinados):
     perda_total = 0
     for trecho in lista_trechos:
@@ -173,16 +170,12 @@ def render_trecho_ui(trecho, prefixo, lista_trechos, materiais_combinados):
     st.markdown(f"**Trecho**"); c1, c2, c3 = st.columns(3)
     trecho['comprimento'] = c1.number_input("L (m)", min_value=0.1, value=trecho['comprimento'], key=f"comp_{prefixo}_{trecho['id']}")
     trecho['diametro'] = c2.number_input("Ø (mm)", min_value=1.0, value=trecho['diametro'], key=f"diam_{prefixo}_{trecho['id']}")
-    
-    # Atualiza o selectbox de materiais
     lista_materiais = list(materiais_combinados.keys())
-    # Garante que o material salvo no estado seja encontrado na lista
     try:
         idx_material = lista_materiais.index(trecho.get('material', 'Aço Carbono (novo)'))
     except ValueError:
-        idx_material = 0 # Padrão se o material salvo não existir mais
+        idx_material = 0
     trecho['material'] = c3.selectbox("Material", options=lista_materiais, index=idx_material, key=f"mat_{prefixo}_{trecho['id']}")
-
     st.markdown("**Acessórios (Fittings)**")
     for idx, acessorio in enumerate(trecho['acessorios']):
         col1, col2 = st.columns([0.8, 0.2])
@@ -192,7 +185,6 @@ def render_trecho_ui(trecho, prefixo, lista_trechos, materiais_combinados):
     c1, c2 = st.columns([3, 1]); c1.selectbox("Selecionar Acessório", options=list(K_FACTORS.keys()), key=f"selectbox_acessorio_{trecho['id']}"); c2.number_input("Qtd", min_value=1, value=1, step=1, key=f"quantidade_acessorio_{trecho['id']}")
     st.button("Adicionar Acessório", on_click=adicionar_acessorio, args=(trecho['id'], lista_trechos), key=f"btn_add_acessorio_{trecho['id']}", use_container_width=True)
 
-# --- Funções de Callback (sem alteração) ---
 def adicionar_item(tipo_lista):
     novo_id = time.time()
     st.session_state[tipo_lista].append({"id": novo_id, "comprimento": 10.0, "diametro": 100.0, "material": "Aço Carbono (novo)", "acessorios": []})
@@ -232,7 +224,6 @@ if st.session_state.get("authentication_status"):
     
     # Inicialização do estado da sessão
     if 'trechos_antes' not in st.session_state: st.session_state.trechos_antes = []
-    # ... (outras inicializações) ...
     if 'trechos_depois' not in st.session_state: st.session_state.trechos_depois = []
     if 'ramais_paralelos' not in st.session_state: st.session_state.ramais_paralelos = {}
     if 'curva_altura_df' not in st.session_state:
@@ -243,10 +234,8 @@ if st.session_state.get("authentication_status"):
     if 'h_geometrica' not in st.session_state: st.session_state.h_geometrica = 15.0
 
     # --- COMBINA BIBLIOTECAS PADRÃO E CUSTOMIZADA ---
-    # @st.cache_data não é ideal aqui por causa da dependência do `username`
     user_fluids = get_user_fluids(username)
     fluidos_combinados = {**FLUIDOS_PADRAO, **user_fluids}
-
     user_materials = get_user_materials(username)
     materiais_combinados = {**MATERIAIS_PADRAO, **user_materials}
     
@@ -255,14 +244,13 @@ if st.session_state.get("authentication_status"):
         st.header(f"Bem-vindo(a), {name}!")
         st.divider()
         st.header("🚀 Gestão de Projetos e Cenários")
-        # ... (Lógica de seleção de Projetos e Cenários, sem alteração) ...
+        
         user_projects = get_user_projects(username)
         project_idx = 0
         if st.session_state.get('project_to_select') in user_projects:
             project_idx = user_projects.index(st.session_state['project_to_select'])
         elif user_projects:
             st.session_state['selected_project'] = user_projects[0]
-        
         st.selectbox("Selecione o Projeto", user_projects, index=project_idx, key="selected_project", placeholder="Nenhum projeto encontrado")
 
         scenarios = []
@@ -273,101 +261,120 @@ if st.session_state.get("authentication_status"):
                 scenario_idx = scenarios.index(st.session_state['scenario_to_select'])
             elif scenarios:
                  st.session_state['selected_scenario'] = scenarios[0]
-
         st.selectbox("Selecione o Cenário", scenarios, index=scenario_idx, key="selected_scenario", placeholder="Nenhum cenário encontrado")
         
         col1, col2 = st.columns(2)
         if col1.button("Carregar Cenário", use_container_width=True, disabled=not st.session_state.get("selected_scenario")):
-            # ... (Lógica de Carregar, sem alteração)
-            pass
+            data = load_scenario(username, st.session_state.selected_project, st.session_state.selected_scenario)
+            if data:
+                st.session_state.h_geometrica = data.get('h_geometrica', 15.0)
+                st.session_state.fluido_selecionado = data.get('fluido_selecionado', "Água a 20°C")
+                st.session_state.curva_altura_df = pd.DataFrame(data['curva_altura'])
+                st.session_state.curva_eficiencia_df = pd.DataFrame(data['curva_eficiencia'])
+                st.session_state.trechos_antes = data['trechos_antes']
+                st.session_state.trechos_depois = data['trechos_depois']
+                st.session_state.ramais_paralelos = data['ramais_paralelos']
+                st.success(f"Cenário '{st.session_state.selected_scenario}' carregado.")
+                st.rerun()
         if col2.button("Deletar Cenário", use_container_width=True, disabled=not st.session_state.get("selected_scenario")):
-            # ... (Lógica de Deletar, sem alteração)
-            pass
-        
+            delete_scenario(username, st.session_state.selected_project, st.session_state.selected_scenario)
+            st.success(f"Cenário '{st.session_state.selected_scenario}' deletado.")
+            st.session_state.project_to_select = None
+            st.session_state.scenario_to_select = None
+            st.rerun()
+
         st.divider()
         st.subheader("Salvar Cenário")
         project_name_input = st.text_input("Nome do Projeto", value=st.session_state.get("selected_project", ""))
         scenario_name_input = st.text_input("Nome do Cenário", value=st.session_state.get("selected_scenario", ""))
         if st.button("Salvar", use_container_width=True):
-            # ... (Lógica de Salvar, sem alteração)
-            pass
-
+            if project_name_input and scenario_name_input:
+                scenario_data = {
+                    'h_geometrica': st.session_state.h_geometrica,
+                    'fluido_selecionado': st.session_state.fluido_selecionado,
+                    'curva_altura': st.session_state.curva_altura_df.to_dict('records'),
+                    'curva_eficiencia': st.session_state.curva_eficiencia_df.to_dict('records'),
+                    'trechos_antes': st.session_state.trechos_antes,
+                    'trechos_depois': st.session_state.trechos_depois,
+                    'ramais_paralelos': st.session_state.ramais_paralelos
+                }
+                save_scenario(username, project_name_input, scenario_name_input, scenario_data)
+                st.success(f"Cenário '{scenario_name_input}' salvo.")
+                st.session_state.project_to_select = project_name_input
+                st.session_state.scenario_to_select = scenario_name_input
+                st.rerun()
+            else:
+                st.warning("É necessário um nome para o Projeto e para o Cenário.")
+        
         st.divider()
         authenticator.logout('Logout', 'sidebar')
         st.divider()
 
-        # --- NOVA SEÇÃO: GERENCIADOR DA BIBLIOTECA ---
         with st.expander("📚 Gerenciador da Biblioteca"):
             st.subheader("Fluidos Customizados")
-            
-            # Formulário para adicionar novo fluido
             with st.form("add_fluid_form", clear_on_submit=True):
                 st.write("Adicionar novo fluido")
                 new_fluid_name = st.text_input("Nome do Fluido")
-                new_fluid_density = st.number_input("Densidade (ρ) [kg/m³]", format="%.2f")
-                new_fluid_viscosity = st.number_input("Viscosidade Cinemática (ν) [m²/s]", format="%.4e")
+                new_fluid_density = st.number_input("Densidade (ρ) [kg/m³]", format="%.2f", min_value=0.0)
+                new_fluid_viscosity = st.number_input("Viscosidade Cinemática (ν) [m²/s]", format="%.4e", min_value=0.0)
                 submitted_fluid = st.form_submit_button("Adicionar Fluido")
                 if submitted_fluid:
                     if new_fluid_name and new_fluid_density > 0 and new_fluid_viscosity > 0:
                         if add_user_fluid(username, new_fluid_name, new_fluid_density, new_fluid_viscosity):
                             st.success(f"Fluido '{new_fluid_name}' adicionado!")
+                            st.rerun()
                         else:
                             st.error(f"Fluido '{new_fluid_name}' já existe.")
                     else:
-                        st.warning("Preencha todos os campos do fluido.")
+                        st.warning("Preencha todos os campos do fluido com valores válidos.")
             
-            # Tabela de fluidos customizados
             if user_fluids:
                 st.write("Fluidos Salvos:")
                 fluids_df = pd.DataFrame.from_dict(user_fluids, orient='index').reset_index()
                 fluids_df.columns = ['Nome', 'Densidade (ρ)', 'Viscosidade (ν)']
-                st.dataframe(fluids_df, use_container_width=True)
-                fluid_to_delete = st.selectbox("Selecione um fluido para deletar", options=list(user_fluids.keys()))
+                st.dataframe(fluids_df, use_container_width=True, hide_index=True)
+                fluid_to_delete = st.selectbox("Selecione um fluido para deletar", options=[""] + list(user_fluids.keys()))
                 if st.button("Deletar Fluido", key="del_fluid"):
-                    delete_user_fluid(username, fluid_to_delete)
-                    st.rerun()
+                    if fluid_to_delete:
+                        delete_user_fluid(username, fluid_to_delete)
+                        st.rerun()
 
             st.subheader("Materiais Customizados")
-            # Formulário para adicionar novo material
             with st.form("add_material_form", clear_on_submit=True):
                 st.write("Adicionar novo material")
                 new_material_name = st.text_input("Nome do Material")
-                new_material_roughness = st.number_input("Rugosidade (ε) [mm]", format="%.4f")
+                new_material_roughness = st.number_input("Rugosidade (ε) [mm]", format="%.4f", min_value=0.0)
                 submitted_material = st.form_submit_button("Adicionar Material")
                 if submitted_material:
                     if new_material_name and new_material_roughness > 0:
                         if add_user_material(username, new_material_name, new_material_roughness):
                             st.success(f"Material '{new_material_name}' adicionado!")
+                            st.rerun()
                         else:
                             st.error(f"Material '{new_material_name}' já existe.")
                     else:
-                        st.warning("Preencha todos os campos do material.")
+                        st.warning("Preencha todos os campos do material com valores válidos.")
 
-            # Tabela de materiais customizados
             if user_materials:
                 st.write("Materiais Salvos:")
                 materials_df = pd.DataFrame.from_dict(user_materials, orient='index', columns=['Rugosidade (ε)']).reset_index()
                 materials_df.columns = ['Nome', 'Rugosidade (ε)']
-                st.dataframe(materials_df, use_container_width=True)
-                material_to_delete = st.selectbox("Selecione um material para deletar", options=list(user_materials.keys()))
+                st.dataframe(materials_df, use_container_width=True, hide_index=True)
+                material_to_delete = st.selectbox("Selecione um material para deletar", options=[""] + list(user_materials.keys()))
                 if st.button("Deletar Material", key="del_mat"):
-                    delete_user_material(username, material_to_delete)
-                    st.rerun()
-
+                    if material_to_delete:
+                        delete_user_material(username, material_to_delete)
+                        st.rerun()
         st.divider()
 
-        # --- Seção de Parâmetros da Simulação (com bibliotecas combinadas) ---
         st.header("⚙️ Parâmetros da Simulação")
-
         lista_fluidos = list(fluidos_combinados.keys())
         idx_fluido = 0
         if st.session_state.fluido_selecionado in lista_fluidos:
             idx_fluido = lista_fluidos.index(st.session_state.fluido_selecionado)
         st.session_state.fluido_selecionado = st.selectbox("Selecione o Fluido", lista_fluidos, index=idx_fluido)
-        
         st.session_state.h_geometrica = st.number_input("Altura Geométrica (m)", 0.0, value=st.session_state.h_geometrica)
         st.divider()
-
         with st.expander("📈 Curva da Bomba", expanded=True):
             st.info("Insira pelo menos 3 pontos da curva de performance.")
             st.subheader("Curva de Altura"); st.session_state.curva_altura_df = st.data_editor(st.session_state.curva_altura_df, num_rows="dynamic", key="editor_altura")
@@ -377,7 +384,6 @@ if st.session_state.get("authentication_status"):
             for i, trecho in enumerate(st.session_state.trechos_antes):
                 with st.container(border=True): render_trecho_ui(trecho, f"antes_{i}", st.session_state.trechos_antes, materiais_combinados)
             c1, c2 = st.columns(2); c1.button("Adicionar Trecho (Antes)", on_click=adicionar_item, args=("trechos_antes",), use_container_width=True); c2.button("Remover Trecho (Antes)", on_click=remover_ultimo_item, args=("trechos_antes",), use_container_width=True)
-        # ... (Restante dos expanders da rede, passando materiais_combinados para render_trecho_ui)
         with st.expander("2. Ramais em Paralelo"):
             for nome_ramal, trechos_ramal in st.session_state.ramais_paralelos.items():
                 with st.container(border=True):
@@ -388,24 +394,72 @@ if st.session_state.get("authentication_status"):
             for i, trecho in enumerate(st.session_state.trechos_depois):
                 with st.container(border=True): render_trecho_ui(trecho, f"depois_{i}", st.session_state.trechos_depois, materiais_combinados)
             c1, c2 = st.columns(2); c1.button("Adicionar Trecho (Depois)", on_click=adicionar_item, args=("trechos_depois",), use_container_width=True); c2.button("Remover Trecho (Depois)", on_click=remover_ultimo_item, args=("trechos_depois",), use_container_width=True)
-        
         st.divider(); st.header("🔌 Equipamentos e Custo"); rend_motor = st.slider("Eficiência do Motor (%)", 1, 100, 90); horas_por_dia = st.number_input("Horas por Dia", 1.0, 24.0, 8.0, 0.5); tarifa_energia = st.number_input("Custo da Energia (R$/kWh)", 0.10, 5.00, 0.75, 0.01, format="%.2f")
 
     # --- CORPO PRINCIPAL DA APLICAÇÃO ---
     st.title("💧 Análise de Redes de Bombeamento com Curva de Bomba")
     
     try:
-        # Passa os dicionários combinados para as funções de cálculo
+        sistema_atual = {'antes': st.session_state.trechos_antes, 'paralelo': st.session_state.ramais_paralelos, 'depois': st.session_state.trechos_depois}
         func_curva_bomba = criar_funcao_curva(st.session_state.curva_altura_df, "Vazão (m³/h)", "Altura (m)")
         func_curva_eficiencia = criar_funcao_curva(st.session_state.curva_eficiencia_df, "Vazão (m³/h)", "Eficiência (%)")
-        # ... (restante do código, passando os dicionários combinados conforme necessário) ...
-        # Exemplo:
-        vazao_op, altura_op, func_curva_sistema = encontrar_ponto_operacao(
-            sistema_atual, st.session_state.h_geometrica, st.session_state.fluido_selecionado, 
-            func_curva_bomba, materiais_combinados, fluidos_combinados
-        )
-        # ... e assim por diante para as outras chamadas de função ...
+        if func_curva_bomba is None or func_curva_eficiencia is None:
+            st.warning("Forneça pontos de dados suficientes (pelo menos 3) para as curvas da bomba.")
+            st.stop()
         
+        shutoff_head = func_curva_bomba(0)
+        if shutoff_head < st.session_state.h_geometrica:
+            st.error(f"**Bomba Incompatível:** A altura máxima da bomba ({shutoff_head:.2f} m) é menor que a Altura Geométrica ({st.session_state.h_geometrica:.2f} m). Não existe ponto de operação.")
+            st.stop()
+        is_rede_vazia = not any(
+            trecho for parte in sistema_atual.values()
+            for trecho in (parte if isinstance(parte, list) else [item for sublist in parte.values() for item in sublist])
+        )
+        if is_rede_vazia:
+            st.warning("Adicione pelo menos um trecho à rede para realizar o cálculo.")
+            st.stop()
+
+        vazao_op, altura_op, func_curva_sistema = encontrar_ponto_operacao(sistema_atual, st.session_state.h_geometrica, st.session_state.fluido_selecionado, func_curva_bomba, materiais_combinados, fluidos_combinados)
+        
+        if vazao_op is not None and altura_op is not None:
+            eficiencia_op = func_curva_eficiencia(vazao_op)
+            if eficiencia_op > 100: eficiencia_op = 100
+            if eficiencia_op < 0: eficiencia_op = 0
+            resultados_energia = calcular_analise_energetica(vazao_op, altura_op, eficiencia_op, rend_motor, horas_por_dia, tarifa_energia, st.session_state.fluido_selecionado, fluidos_combinados)
+            st.header("📊 Resultados no Ponto de Operação")
+            c1,c2,c3,c4 = st.columns(4); c1.metric("Vazão de Operação", f"{vazao_op:.2f} m³/h"); c2.metric("Altura de Operação", f"{altura_op:.2f} m"); c3.metric("Eficiência da Bomba", f"{eficiencia_op:.1f} %"); c4.metric("Custo Anual", f"R$ {resultados_energia['custo_anual']:.2f}")
+            st.divider()
+            st.header("🗺️ Diagrama da Rede")
+            _, distribuicao_vazao_op = calcular_perdas_paralelo(sistema_atual['paralelo'], vazao_op, st.session_state.fluido_selecionado, materiais_combinados, fluidos_combinados)
+            diagrama = gerar_diagrama_rede(sistema_atual, vazao_op, distribuicao_vazao_op if len(sistema_atual['paralelo']) >= 2 else {}, st.session_state.fluido_selecionado, materiais_combinados, fluidos_combinados)
+            st.graphviz_chart(diagrama)
+            st.divider()
+            st.header("📈 Gráfico de Curvas: Bomba vs. Sistema")
+            max_vazao_curva = st.session_state.curva_altura_df['Vazão (m³/h)'].max()
+            max_plot_vazao = max(vazao_op * 1.2, max_vazao_curva * 1.2) 
+            vazao_range = np.linspace(0, max_plot_vazao, 100)
+            altura_bomba = func_curva_bomba(vazao_range)
+            altura_sistema = [func_curva_sistema(q) if func_curva_sistema(q) < 1e10 else np.nan for q in vazao_range]
+            fig, ax = plt.subplots(figsize=(10, 6))
+            ax.plot(vazao_range, altura_bomba, label='Curva da Bomba', color='royalblue', lw=2)
+            ax.plot(vazao_range, altura_sistema, label='Curva do Sistema', color='seagreen', lw=2)
+            ax.scatter(vazao_op, altura_op, color='red', s=100, zorder=5, label=f'Ponto de Operação ({vazao_op:.1f} m³/h, {altura_op:.1f} m)')
+            ax.set_xlabel("Vazão (m³/h)"); ax.set_ylabel("Altura Manométrica (m)"); ax.set_title("Curva da Bomba vs. Curva do Sistema"); ax.legend(); ax.grid(True)
+            ax.set_xlim(left=0, right=max_plot_vazao)
+            max_altura_relevante = max(altura_op, np.nanmax(altura_sistema) if any(~np.isnan(altura_sistema)) else altura_op)
+            y_max_ajustado = max_altura_relevante * 1.15
+            y_min_ajustado = st.session_state.h_geometrica * 0.9
+            ax.set_ylim(bottom=y_min_ajustado, top=y_max_ajustado)
+            st.pyplot(fig)
+            st.divider()
+            st.header("📈 Análise de Sensibilidade de Custo por Diâmetro")
+            escala_range = st.slider("Fator de Escala para Diâmetros (%)", 50, 200, (80, 120), key="sensibilidade_slider")
+            params_equipamentos_sens = {'eficiencia_bomba_percent': eficiencia_op, 'eficiencia_motor_percent': rend_motor, 'horas_dia': horas_por_dia, 'custo_kwh': tarifa_energia, 'fluido_selecionado': st.session_state.fluido_selecionado}
+            params_fixos_sens = {'vazao_op': vazao_op, 'h_geo': st.session_state.h_geometrica, 'fluido': st.session_state.fluido_selecionado, 'equipamentos': params_equipamentos_sens, 'materiais_combinados': materiais_combinados, 'fluidos_combinados': fluidos_combinados}
+            chart_data_sensibilidade = gerar_grafico_sensibilidade_diametro(sistema_atual, escala_range, **params_fixos_sens)
+            st.line_chart(chart_data_sensibilidade.set_index('Fator de Escala nos Diâmetros (%)'))
+        else:
+            st.error("Não foi possível encontrar um ponto de operação. Verifique os parâmetros.")
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado durante a execução. Detalhe: {str(e)}")
 
